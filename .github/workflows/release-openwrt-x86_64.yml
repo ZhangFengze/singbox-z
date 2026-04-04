@@ -42,15 +42,10 @@ jobs:
           if [[ -n "${{ inputs.version }}" ]]; then
             VERSION="${{ inputs.version }}"
           else
-            BASE_VERSION=$(CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go run -v ./cmd/internal/read_tag --ci --nightly 2>/dev/null || true)
-            if [ -z "$BASE_VERSION" ] || [[ "$BASE_VERSION" == *"unknown"* ]]; then
-              BASE_VERSION="1.14.0-alpha.8"
-            fi
-            BASE_VERSION="${BASE_VERSION#v}"
-            VERSION="v${BASE_VERSION}-build.${{ github.run_number }}"
+            VERSION="${{ github.run_number }}"
           fi
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
-          PKG_VERSION="${VERSION//-/\~}"
+          PKG_VERSION="${VERSION}"
           echo "PKG_VERSION=$PKG_VERSION" >> "$GITHUB_ENV"
 
       - name: Clone cronet-go
