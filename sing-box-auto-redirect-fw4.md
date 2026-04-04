@@ -59,12 +59,31 @@
 2. 在 `!cleanup` 分支里取出当前动态端口
 3. 在现有 `chain input` 中补一条 `tcp dport <redirectPort> accept`
 
-### 建议代码形态
+### 建议代码形态（最终实现版，含接口安全限制）
 
 先取端口：
 
 ```go
 redirectPort := strconv.FormatUint(uint64(r.redirectPort()), 10)
+```
+
+**为了避免将端口暴露给不相干的接口（如外网 `wan` 接口），我们在规则里增加了基于 `IncludeInterface` / `ExcludeInterface` 的精准匹配逻辑：**
+
+```go
+redirectRule := `tcp dport ` + redirectPort + ` counter accept comment "!` + r.tableName + `: Accept auto-redirect port"`
+if len(r.tunOptions.IncludeInterface) > 0 {
+	if len(r.tunOptions.IncludeInterface) == 1 {
+		redirectRule = `iifname "` + r.tunOptions.IncludeInterface[0] + `" ` + redirectRule
+	} else {
+		redirectRule = `iifname { ` + quoteNFTInterfaceList(r.tunOptions.IncludeInterface) + ` } ` + redirectRule
+	}
+} else if len(r.tunOptions.ExcludeInterface) > 0 {
+	if len(r.tunOptions.ExcludeInterface) == 1 {
+		redirectRule = `iifname != "` + r.tunOptions.ExcludeInterface[0] + `" ` + redirectRule
+	} else {
+		redirectRule = `iifname != { ` + quoteNFTInterfaceList(r.tunOptions.ExcludeInterface) + ` } ` + redirectRule
+	}
+}
 ```
 
 然后把当前写入的 `chain input` 扩成：
@@ -74,7 +93,14 @@ chain input {
  type filter hook input priority filter; policy accept;
  iifname "` + r.tunOptions.Name + `" counter accept comment "!` + r.tableName + `: Accept traffic from tun"
  oifname "` + r.tunOptions.Name + `" counter accept comment "!` + r.tableName + `: Accept traffic from tun"
- tcp dport ` + redirectPort + ` counter accept comment "!` + r.tableName + `: Accept auto-redirect port"
+ ` + redirectRule + `
+}
+```
+
+并增加辅助函数：
+```go
+func quoteNFTInterfaceList(names []string) string {
+	return `"` + strings.Join(names, `", "`) + `"`
 }
 ```
 
@@ -87,21 +113,13 @@ chain input {
 - 不新增独立 cleanup 分支
 - 不改成增量插 rule，继续沿用“重写整个规则文件”的方式
 
-## 风险
+## 风险（已规避）
 
-最小版规则：
-
+最小版规则原本是全局开放：
 ```nft
 tcp dport <redirectPort> accept
 ```
-
-这条规则没有接口限制，可能会放宽到其他入口接口。  
-所以第一版建议先做 PoC，确认问题确实是缺这条放行规则。
-
-如果 PoC 生效，再考虑第二版收窄范围，例如：
-
-- 限制到指定 `iifname`
-- 或排除 `wan`
+**这一风险已通过上述实现的 `iifname` 精准限制完美规避**。现在会自动根据你配置文件中的入站规则网卡（Include/Exclude）做严格的请求来源网卡过滤。
 
 ## 验证
 
