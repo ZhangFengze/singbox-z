@@ -44,7 +44,8 @@
 2. 从官方拉一份最新的纯净版源码塞进来：
    ```bash
    git clone -b v1.15.0 --depth 1 https://github.com/SagerNet/sing-box.git sing-box
-   rm -rf sing-box/.git sing-box/.github
+   # 注意：只需删除 .git 和官方的 workflows 即可，切勿删除整个 .github，否则出包时会找不到编译所需的环境版本号和打包脚本！
+   rm -rf sing-box/.git sing-box/.github/workflows
    ```
 3. 在新的 `sing-box/go.mod` 最底部加回这行金句：
    ```go
