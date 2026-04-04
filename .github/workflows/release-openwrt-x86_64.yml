@@ -21,6 +21,9 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    defaults:
+      run:
+        working-directory: sing-box
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -78,7 +81,7 @@ jobs:
             ~/cronet-go/naiveproxy/src/gn/out/
             ~/cronet-go/naiveproxy/src/chrome/build/pgo_profiles/
             ~/cronet-go/naiveproxy/src/out/sysroot-build/
-          key: chromium-toolchain-amd64-musl-${{ hashFiles('.github/CRONET_GO_VERSION') }}
+          key: chromium-toolchain-amd64-musl-${{ hashFiles('sing-box/.github/CRONET_GO_VERSION') }}
 
       - name: Download Chromium toolchain
         shell: bash
@@ -243,15 +246,15 @@ jobs:
           prerelease: ${{ contains(env.VERSION, '-') }}
           overwrite_files: true
           files: |
-            dist/sing-box_*.ipk
-            dist/sing-box_*.apk
-            dist/install_openwrt_package.sh
+            sing-box/dist/sing-box_*.ipk
+            sing-box/dist/sing-box_*.apk
+            sing-box/dist/install_openwrt_package.sh
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: sing-box-openwrt-x86_64-release
           path: |
-            dist/sing-box_*.ipk
-            dist/sing-box_*.apk
-            dist/install_openwrt_package.sh
+            sing-box/dist/sing-box_*.ipk
+            sing-box/dist/sing-box_*.apk
+            sing-box/dist/install_openwrt_package.sh

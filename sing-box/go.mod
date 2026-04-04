@@ -167,4 +167,4 @@ require (
 	lukechampine.com/blake3 v1.3.0 // indirect
 )
 
-replace github.com/sagernet/sing-tun => ./sing-tun
+replace github.com/sagernet/sing-tun => ../sing-tun
