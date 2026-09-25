@@ -1,4 +1,4 @@
-# singbox-z 单仓库架构说明 (基于 v1.14.0-alpha.8)
+# singbox-z 单仓库架构说明 (基于 v1.14.2)
 
 ## 架构概述
 
@@ -18,7 +18,7 @@
   ├── sing-tun/                            <-- 包含自定义修补的库源码
   │   └── redirect_nftables_rules_openwrt.go <-- 修改点：fw4 接口精准放行
   ├── sing-box-auto-redirect-fw4.md        <-- 放行功能的设计草案及说明
-  └── singbox-z-architecture-v1.14.0-alpha.8.md <-- 本文档
+  └── singbox-z-architecture-v1.14.2.md <-- 本文档
 ```
 
 ## 核心修改：`fw4` 动态端口网卡级放行补丁
