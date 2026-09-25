@@ -251,7 +251,7 @@ func TestUint8SliceCompat(t *testing.T) {
 			requireUint8SliceEqual(t, tc.input, readBack)
 
 			// Old write -> new read
-			readBack2, err := readRuleItemUint8[uint8](bufio.NewReader(bytes.NewReader(oldBuf.Bytes())))
+			readBack2, err := varbin.ReadSlice[uint8](bufio.NewReader(bytes.NewReader(oldBuf.Bytes())), binary.BigEndian)
 			require.NoError(t, err)
 			requireUint8SliceEqual(t, tc.input, readBack2)
 		})
@@ -300,7 +300,7 @@ func TestUint16SliceCompat(t *testing.T) {
 			requireUint16SliceEqual(t, tc.input, readBack)
 
 			// Old write -> new read
-			readBack2, err := readRuleItemUint16(bufio.NewReader(bytes.NewReader(oldBuf.Bytes())))
+			readBack2, err := varbin.ReadSlice[uint16](bufio.NewReader(bytes.NewReader(oldBuf.Bytes())), binary.BigEndian)
 			require.NoError(t, err)
 			requireUint16SliceEqual(t, tc.input, readBack2)
 		})
@@ -450,7 +450,7 @@ func buildIPSet(cidrs ...string) *netipx.IPSet {
 
 func buildLargeIPSet(count int) *netipx.IPSet {
 	var builder netipx.IPSetBuilder
-	for i := 0; i < count; i++ {
+	for i := range count {
 		prefix := netip.PrefixFrom(netip.AddrFrom4([4]byte{10, byte(i / 256), byte(i % 256), 0}), 24)
 		builder.AddPrefix(prefix)
 	}

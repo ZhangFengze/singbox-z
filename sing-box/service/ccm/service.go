@@ -124,8 +124,6 @@ type Service struct {
 	userManager    *UserManager
 	accessMutex    sync.RWMutex
 	usageTracker   *AggregatedUsage
-	trackingGroup  sync.WaitGroup
-	shuttingDown   bool
 }
 
 func NewService(ctx context.Context, logger log.ContextLogger, tag string, options option.CCMServiceOptions) (adapter.Service, error) {
@@ -162,6 +160,7 @@ func NewService(ctx context.Context, logger log.ContextLogger, tag string, optio
 		usageTracker = &AggregatedUsage{
 			LastUpdated:  time.Now(),
 			Combinations: make([]CostCombination, 0),
+			ctx:          ctx,
 			filePath:     options.UsagesPath,
 			logger:       logger,
 		}
@@ -203,7 +202,7 @@ func (s *Service) Start(stage adapter.StartStage) error {
 
 	s.userManager.UpdateUsers(s.users)
 
-	credentials, err := platformReadCredentials(s.credentialPath)
+	credentials, err := platformReadCredentials(s.ctx, s.credentialPath)
 	if err != nil {
 		return E.Cause(err, "read credentials")
 	}
@@ -273,7 +272,7 @@ func (s *Service) getAccessToken() (string, error) {
 
 	s.credentials = newCredentials
 
-	err = platformWriteCredentials(newCredentials, s.credentialPath)
+	err = platformWriteCredentials(s.ctx, newCredentials, s.credentialPath)
 	if err != nil {
 		s.logger.Warn("persist refreshed token: ", err)
 	}
@@ -283,8 +282,8 @@ func (s *Service) getAccessToken() (string, error) {
 
 func detectContextWindow(betaHeader string, totalInputTokens int64) int {
 	if totalInputTokens > premiumContextThreshold {
-		features := strings.Split(betaHeader, ",")
-		for _, feature := range features {
+		features := strings.SplitSeq(betaHeader, ",")
+		for feature := range features {
 			if strings.HasPrefix(strings.TrimSpace(feature), "context-1m") {
 				return contextWindowPremium
 			}
@@ -507,8 +506,8 @@ func (s *Service) handleResponseWithTracking(writer http.ResponseWriter, respons
 					continue
 				}
 
-				if bytes.HasPrefix(line, []byte("data: ")) {
-					eventData := bytes.TrimPrefix(line, []byte("data: "))
+				if after, ok0 := bytes.CutPrefix(line, []byte("data: ")); ok0 {
+					eventData := after
 					if bytes.Equal(eventData, []byte("[DONE]")) {
 						continue
 					}
