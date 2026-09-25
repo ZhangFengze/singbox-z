@@ -5,7 +5,6 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"net"
-	"os"
 	"strings"
 	"sync"
 	"time"
@@ -20,6 +19,7 @@ import (
 	E "github.com/sagernet/sing/common/exceptions"
 	"github.com/sagernet/sing/common/ntp"
 	"github.com/sagernet/sing/service"
+	"github.com/sagernet/sing/service/filemanager"
 )
 
 var errInsecureUnused = E.New("tls: insecure unused")
@@ -90,8 +90,10 @@ func getACMENextProtos(provider adapter.CertificateProvider) []string {
 }
 
 type STDServerConfig struct {
+	ctx                   context.Context
 	access                sync.RWMutex
 	config                *tls.Config
+	handshakeTimeout      time.Duration
 	logger                log.Logger
 	certificateProvider   managedCertificateProvider
 	acmeService           adapter.SimpleLifecycle
@@ -139,6 +141,18 @@ func (c *STDServerConfig) SetNextProtos(nextProto []string) {
 	c.config = config
 }
 
+func (c *STDServerConfig) HandshakeTimeout() time.Duration {
+	c.access.RLock()
+	defer c.access.RUnlock()
+	return c.handshakeTimeout
+}
+
+func (c *STDServerConfig) SetHandshakeTimeout(timeout time.Duration) {
+	c.access.Lock()
+	defer c.access.Unlock()
+	c.handshakeTimeout = timeout
+}
+
 func (c *STDServerConfig) hasACMEALPN() bool {
 	if c.acmeService != nil {
 		return true
@@ -165,7 +179,8 @@ func (c *STDServerConfig) Server(conn net.Conn) (Conn, error) {
 
 func (c *STDServerConfig) Clone() Config {
 	return &STDServerConfig{
-		config: c.config.Clone(),
+		config:           c.config.Clone(),
+		handshakeTimeout: c.handshakeTimeout,
 	}
 }
 
@@ -244,14 +259,15 @@ func (c *STDServerConfig) startWatcher() error {
 
 func (c *STDServerConfig) certificateUpdated(path string) error {
 	if path == c.certificatePath || path == c.keyPath {
-		if path == c.certificatePath {
-			certificate, err := os.ReadFile(c.certificatePath)
+		switch path {
+		case c.certificatePath:
+			certificate, err := filemanager.ReadFile(c.ctx, c.certificatePath)
 			if err != nil {
 				return E.Cause(err, "reload certificate from ", c.certificatePath)
 			}
 			c.certificate = certificate
-		} else if path == c.keyPath {
-			key, err := os.ReadFile(c.keyPath)
+		case c.keyPath:
+			key, err := filemanager.ReadFile(c.ctx, c.keyPath)
 			if err != nil {
 				return E.Cause(err, "reload key from ", c.keyPath)
 			}
@@ -271,9 +287,9 @@ func (c *STDServerConfig) certificateUpdated(path string) error {
 		clientCertificateCA := x509.NewCertPool()
 		var reloaded bool
 		for _, certPath := range c.clientCertificatePath {
-			content, err := os.ReadFile(certPath)
+			content, err := filemanager.ReadFile(c.ctx, certPath)
 			if err != nil {
-				c.logger.Error(E.Cause(err, "reload certificate from ", c.clientCertificatePath))
+				c.logger.Error(E.Cause(err, "reload certificate from ", certPath))
 				continue
 			}
 			if !clientCertificateCA.AppendCertsFromPEM(content) {
@@ -292,7 +308,7 @@ func (c *STDServerConfig) certificateUpdated(path string) error {
 		c.access.Unlock()
 		c.logger.Info("reloaded client certificates")
 	} else if path == c.echKeyPath {
-		echKey, err := os.ReadFile(c.echKeyPath)
+		echKey, err := filemanager.ReadFile(c.ctx, c.echKeyPath)
 		if err != nil {
 			return E.Cause(err, "reload ECH keys from ", c.echKeyPath)
 		}
@@ -306,7 +322,7 @@ func (c *STDServerConfig) certificateUpdated(path string) error {
 }
 
 func (c *STDServerConfig) Close() error {
-	return common.Close(c.certificateProvider, c.acmeService, c.watcher)
+	return common.Close(c.certificateProvider, c.acmeService, common.PtrOrNil(c.watcher))
 }
 
 func NewSTDServer(ctx context.Context, logger log.ContextLogger, options option.InboundTLSOptions) (ServerConfig, error) {
@@ -390,7 +406,7 @@ func NewSTDServer(ctx context.Context, logger log.ContextLogger, options option.
 		if len(options.Certificate) > 0 {
 			certificate = []byte(strings.Join(options.Certificate, "\n"))
 		} else if options.CertificatePath != "" {
-			content, err := os.ReadFile(options.CertificatePath)
+			content, err := filemanager.ReadFile(ctx, options.CertificatePath)
 			if err != nil {
 				return nil, E.Cause(err, "read certificate")
 			}
@@ -399,7 +415,7 @@ func NewSTDServer(ctx context.Context, logger log.ContextLogger, options option.
 		if len(options.Key) > 0 {
 			key = []byte(strings.Join(options.Key, "\n"))
 		} else if options.KeyPath != "" {
-			content, err := os.ReadFile(options.KeyPath)
+			content, err := filemanager.ReadFile(ctx, options.KeyPath)
 			if err != nil {
 				return nil, E.Cause(err, "read key")
 			}
@@ -442,7 +458,7 @@ func NewSTDServer(ctx context.Context, logger log.ContextLogger, options option.
 		} else if len(options.ClientCertificatePath) > 0 {
 			clientCertificateCA := x509.NewCertPool()
 			for _, path := range options.ClientCertificatePath {
-				content, err := os.ReadFile(path)
+				content, err := filemanager.ReadFile(ctx, path)
 				if err != nil {
 					return nil, E.Cause(err, "read client certificate from ", path)
 				}
@@ -452,13 +468,14 @@ func NewSTDServer(ctx context.Context, logger log.ContextLogger, options option.
 			}
 			tlsConfig.ClientCAs = clientCertificateCA
 		} else if len(options.ClientCertificatePublicKeySHA256) > 0 {
-			if tlsConfig.ClientAuth == tls.RequireAndVerifyClientCert {
+			switch tlsConfig.ClientAuth {
+			case tls.RequireAndVerifyClientCert:
 				tlsConfig.ClientAuth = tls.RequireAnyClientCert
-			} else if tlsConfig.ClientAuth == tls.VerifyClientCertIfGiven {
+			case tls.VerifyClientCertIfGiven:
 				tlsConfig.ClientAuth = tls.RequestClientCert
 			}
 			tlsConfig.VerifyPeerCertificate = func(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error {
-				return verifyPublicKeySHA256(options.ClientCertificatePublicKeySHA256, rawCerts, tlsConfig.Time)
+				return VerifyPublicKeySHA256(options.ClientCertificatePublicKeySHA256, rawCerts)
 			}
 		} else {
 			return nil, E.New("missing client_certificate, client_certificate_path or client_certificate_public_key_sha256 for client authentication")
@@ -471,8 +488,16 @@ func NewSTDServer(ctx context.Context, logger log.ContextLogger, options option.
 			return nil, err
 		}
 	}
+	var handshakeTimeout time.Duration
+	if options.HandshakeTimeout > 0 {
+		handshakeTimeout = options.HandshakeTimeout.Build()
+	} else {
+		handshakeTimeout = C.TCPTimeout
+	}
 	serverConfig := &STDServerConfig{
+		ctx:                   ctx,
 		config:                tlsConfig,
+		handshakeTimeout:      handshakeTimeout,
 		logger:                logger,
 		certificateProvider:   certificateProvider,
 		acmeService:           acmeService,

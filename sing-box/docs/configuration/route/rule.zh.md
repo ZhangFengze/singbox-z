@@ -5,7 +5,8 @@ icon: material/new-box
 !!! quote "sing-box 1.14.0 中的更改"
 
     :material-plus: [source_mac_address](#source_mac_address)  
-    :material-plus: [source_hostname](#source_hostname)
+    :material-plus: [source_hostname](#source_hostname)  
+    :material-plus: [package_name_regex](#package_name_regex)
 
 !!! quote "sing-box 1.13.0 中的更改"
 
@@ -127,6 +128,9 @@ icon: material/new-box
         "package_name": [
           "com.termux"
         ],
+        "package_name_regex": [
+          "^com\\.termux.*"
+        ],
         "user": [
           "sekai"
         ],
@@ -206,9 +210,9 @@ icon: material/new-box
     (`port` || `port_range`) &&  
     (`source_geoip` || `source_ip_cidr` || `source_ip_is_private`) &&  
     (`source_port` || `source_port_range`) &&  
-    `other fields`
+    `其他字段`
 
-    另外，引用规则集中的每个分支都可视为与外层规则合并，不同分支之间仍保持 OR 语义。
+    当规则集仅包含一条默认规则且非 invert 时，其中字段视为按以上规则与外层规则合并；否则，作为一条 `其他字段` 匹配；不同规则集之间始终保持 or。
 
 #### inbound
 
@@ -352,6 +356,12 @@ icon: material/new-box
 
 匹配 Android 应用包名。
 
+#### package_name_regex
+
+!!! question "自 sing-box 1.14.0 起"
+
+使用正则表达式匹配 Android 应用包名。
+
 #### user
 
 !!! quote ""
@@ -457,6 +467,7 @@ icon: material/new-box
 |-------------|--------------------------------|
 | `tailscale` | 匹配 MagicDNS 域名和对端的 allowed IPs |
 | `wireguard` | 匹配对端的 allowed IPs              |
+| `bridge`    | 匹配除本机本地地址外的所有地址，仅在[预匹配](/zh/configuration/shared/pre-match/)中 |
 
 #### source_mac_address
 

@@ -81,7 +81,7 @@ func (f *darwinConnectionFinder) find(network string, source netip.AddrPort, des
 	source = normalizeDarwinAddrPort(source)
 	destination = normalizeDarwinAddrPort(destination)
 	var lastOwner *adapter.ConnectionOwner
-	for attempt := 0; attempt < 2; attempt++ {
+	for attempt := range 2 {
 		snapshot, fromCache, err := f.loadSnapshot(networkName, attempt > 0)
 		if err != nil {
 			return nil, err
@@ -117,6 +117,12 @@ func (f *darwinConnectionFinder) find(network string, source netip.AddrPort, des
 		return lastOwner, nil
 	}
 	return nil, ErrNotFound
+}
+
+func (f *darwinConnectionFinder) resetCache() {
+	f.access.Lock()
+	defer f.access.Unlock()
+	clear(f.snapshots)
 }
 
 func (f *darwinConnectionFinder) loadSnapshot(network string, forceRefresh bool) (darwinSnapshot, bool, error) {
